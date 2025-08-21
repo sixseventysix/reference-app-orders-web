@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto, invalidate } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import Fulfillment from '$lib/components/Fullfillment.svelte';
 	import Button from '$lib/components/Button.svelte';
 	import { page } from '$app/state';
@@ -9,60 +9,131 @@
 	import Heading from '$lib/components/Heading.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 
-	let { data } = $props();
-	let order = $derived(data.order);
+	// Client-side state management
+	let order = $state(null);
+	let loading = $state(true);
+	let actionLoading = $state(false);
+	let error = $state(null);
 	let id = $derived(page.params.id);
-	let loading = $state(false);
+	let pollInterval = null;
 
-	onMount(() => {
-		const finalStatuses = ['completed', 'failed', 'cancelled', 'timedOut'];
-
-		const interval = setInterval(() => {
-			const isFinal = finalStatuses.includes(order.status);
-			if (!isFinal) {
-				invalidate('data:order');
-			} else {
-				clearInterval(interval);
+	// Load order data
+	const loadOrder = async () => {
+		// Don't try to load if id is undefined
+		if (!id || id === 'undefined') {
+			console.log('Order ID not available yet, skipping load');
+			return;
+		}
+		
+		try {
+			const response = await fetch(`/api/orders/${id}`);
+			if (!response.ok) {
+				throw new Error(`Failed to fetch order: ${response.status}`);
 			}
-		}, 500);
+			const data = await response.json();
+			order = data.order || data;
+		} catch (err) {
+			console.error('Error loading order:', err);
+			error = err.message;
+		} finally {
+			loading = false;
+		}
+	};
 
+	onMount(async () => {
+		// Wait for id to be available
+		if (id && id !== 'undefined') {
+			await loadOrder();
+		} else {
+			loading = false;
+			error = "Invalid order ID";
+			return;
+		}
+		
+		// Set up polling for real-time updates (optional)
+		const finalStatuses = ['completed', 'failed', 'cancelled', 'timedOut'];
+		pollInterval = setInterval(async () => {
+			if (order && !finalStatuses.includes(order.status)) {
+				await loadOrder();
+			} else if (pollInterval) {
+				clearInterval(pollInterval);
+			}
+		}, 2000); // Poll every 2 seconds instead of 500ms
+
+		// Cleanup on component destroy
 		return () => {
-			clearInterval(interval);
+			if (pollInterval) {
+				clearInterval(pollInterval);
+			}
 		};
 	});
 
 	const sendAction = async (action: Action) => {
-		loading = true;
-		await fetch('/api/order-action', { method: 'POST', body: JSON.stringify({ id, action }) });
-		setTimeout(() => {
-			loading = false;
-			if (action === 'cancel') {
-				goto(`/orders`, { invalidateAll: true });
-			} else {
-				goto(`/orders/${id}`, { invalidateAll: true });
+		actionLoading = true;
+		try {
+			// Call your Go backend API for order actions
+			const response = await fetch('/api/order-action', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ id, action })
+			});
+
+			if (!response.ok) {
+				throw new Error(`Action failed: ${response.status}`);
 			}
-		}, 1000);
+
+			// Wait a moment for the action to process
+			setTimeout(async () => {
+				actionLoading = false;
+				if (action === 'cancel') {
+					goto('/orders');
+				} else {
+					// Reload the order data to show updated status
+					await loadOrder();
+				}
+			}, 1000);
+		} catch (err) {
+			console.error('Error sending action:', err);
+			actionLoading = false;
+			// You might want to show an error message to the user
+		}
 	};
 
-	const actionRequired = $derived(order.status === 'customerActionRequired');
+	const actionRequired = $derived(order?.status === 'customerActionRequired');
 </script>
 
-<Card>
-	<div class="w-full flex flex-col gap-2">
-		<div class="flex flex-row items-center gap-2 w-full">
-			<StatusBadge status={order.status} />
-			<Heading>{order.id}</Heading>
-		</div>
-		<Fulfillment {order} />
+{#if loading}
+	<div class="flex justify-center items-center p-8">
+		<p>Loading order...</p>
 	</div>
-	{#snippet actionButtons()}
-		{#if actionRequired}
-			<div class="flex items-center justify-end gap-2">
-				<Button {loading} onClick={() => sendAction('amend')}>Amend</Button>
-				<Button {loading} onClick={() => sendAction('cancel')}>Cancel</Button>
+{:else if error}
+	<div class="flex justify-center items-center p-8">
+		<p class="text-red-600">Error: {error}</p>
+	</div>
+{:else if order}
+	<Card>
+		<div class="w-full flex flex-col gap-2">
+			<div class="flex flex-row items-center gap-2 w-full">
+				<StatusBadge status={order.status} />
+				<Heading>{order.id}</Heading>
 			</div>
-		{:else}
-			<p class="px-4 py-2 text-sm font-light"><i>Customer {order.customerId}</i></p>
-		{/if}
-	{/snippet}
-</Card>
+			<Fulfillment {order} />
+		</div>
+		{#snippet actionButtons()}
+			{#if actionRequired}
+				<div class="flex items-center justify-end gap-2">
+					<Button loading={actionLoading} onClick={() => sendAction('amend')}>Amend</Button>
+					<Button loading={actionLoading} onClick={() => sendAction('cancel')}>Cancel</Button>
+				</div>
+			{:else}
+				<p class="px-4 py-2 text-sm font-light"><i>Customer {order.customerId}</i></p>
+			{/if}
+		{/snippet}
+	</Card>
+{:else}
+	<div class="flex justify-center items-center p-8">
+		<p>Order not found</p>
+	</div>
+{/if}

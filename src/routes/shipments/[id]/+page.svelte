@@ -1,54 +1,176 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import Card from '$lib/components/Card.svelte';
 	import Button from '$lib/components/Button.svelte';
 	import Heading from '$lib/components/Heading.svelte';
 	import ItemDetails from '$lib/components/ItemDetails.svelte';
 	import ShipmentProgress from '$lib/components/ShipmentProgress.svelte';
+	import { page } from '$app/state';
 	import type { Shipment } from '$lib/types/order';
 
-	let { data } = $props();
-	let shipment: Shipment = $derived(data.shipment);
+	// Client-side state management
+	let shipment: Shipment | null = $state(null);
+	let loading = $state(true);
+	let actionLoading = $state(false);
+	let error = $state(null);
+	let id = $derived(page.params.id);
 	let status = $derived(shipment?.status);
-	let broadcaster: BroadcastChannel;
+	let broadcaster: BroadcastChannel | null = null;
 
-	$effect(() => {
-		if (shipment?.id && !broadcaster) {
+	// Load shipment data
+	const loadShipment = async () => {
+		// Don't try to load if id is undefined
+		if (!id || id === 'undefined') {
+			console.log('Shipment ID not available yet, skipping load');
+			return;
+		}
+		
+		try {
+			const response = await fetch(`/api/shipments/${id}`);
+			if (!response.ok) {
+				throw new Error(`Failed to fetch shipment: ${response.status}`);
+			}
+			const data = await response.json();
+			shipment = data.shipment || data;
+		} catch (err) {
+			console.error('Error loading shipment:', err);
+			error = err.message;
+		} finally {
+			loading = false;
+		}
+	};
+
+	onMount(async () => {
+		// Wait for id to be available
+		if (id && id !== 'undefined') {
+			await loadShipment();
+		} else {
+			loading = false;
+			error = "Invalid shipment ID";
+			return;
+		}
+		
+		// Set up BroadcastChannel for real-time updates (if shipment loaded successfully)
+		if (shipment?.id) {
 			broadcaster = new BroadcastChannel(`shipment-${shipment.id}`);
-			broadcaster?.addEventListener('message', (event) => {
-				status = event.data;
+			broadcaster.addEventListener('message', (event) => {
+				if (shipment) {
+					shipment.status = event.data;
+				}
 			});
 		}
+
+		// Cleanup on component destroy
+		return () => {
+			if (broadcaster) {
+				broadcaster.close();
+			}
+		};
 	});
 
 	const dispatchShipment = async (shipment: Shipment) => {
-		const signal = { name: 'ShipmentUpdate', status: 'dispatched' };
-		await fetch('/api/shipment', { method: 'POST', body: JSON.stringify({ shipment, signal }) });
-		status = 'dispatched';
-		broadcaster?.postMessage(status);
+		if (!shipment) return;
+		
+		actionLoading = true;
+		try {
+			const signal = { name: 'ShipmentUpdate', status: 'dispatched' };
+			const response = await fetch('/api/shipment', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ shipment, signal })
+			});
+
+			if (!response.ok) {
+				throw new Error(`Failed to dispatch shipment: ${response.status}`);
+			}
+
+			// Update local state
+			shipment.status = 'dispatched';
+			
+			// Broadcast the status change
+			if (broadcaster) {
+				broadcaster.postMessage('dispatched');
+			}
+		} catch (err) {
+			console.error('Error dispatching shipment:', err);
+			// You might want to show an error message to the user
+		} finally {
+			actionLoading = false;
+		}
 	};
 
 	const deliverShipment = async (shipment: Shipment) => {
-		const signal = { name: 'ShipmentUpdate', status: 'delivered' };
-		await fetch('/api/shipment', { method: 'POST', body: JSON.stringify({ shipment, signal }) });
-		status = 'delivered';
-		broadcaster?.postMessage(status);
+		if (!shipment) return;
+		
+		actionLoading = true;
+		try {
+			const signal = { name: 'ShipmentUpdate', status: 'delivered' };
+			const response = await fetch('/api/shipment', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ shipment, signal })
+			});
+
+			if (!response.ok) {
+				throw new Error(`Failed to deliver shipment: ${response.status}`);
+			}
+
+			// Update local state
+			shipment.status = 'delivered';
+			
+			// Broadcast the status change
+			if (broadcaster) {
+				broadcaster.postMessage('delivered');
+			}
+		} catch (err) {
+			console.error('Error delivering shipment:', err);
+			// You might want to show an error message to the user
+		} finally {
+			actionLoading = false;
+		}
 	};
 </script>
 
-<Card>
-	<div class="w-full flex flex-col gap-2">
-		<div class="flex flex-col md:flex-row items-center justify-between gap-2 w-full">
-			<Heading>{shipment.id}</Heading>
-			<ShipmentProgress {status} />
-		</div>
-		<ItemDetails items={shipment.items} />
+{#if loading}
+	<div class="flex justify-center items-center p-8">
+		<p>Loading shipment...</p>
 	</div>
-	{#snippet actionButtons()}
-		<Button disabled={status !== 'booked'} onClick={() => dispatchShipment(shipment)}>
-			Dispatch
-		</Button>
-		<Button disabled={status !== 'dispatched'} onClick={() => deliverShipment(shipment)}>
-			Deliver
-		</Button>
-	{/snippet}
-</Card>
+{:else if error}
+	<div class="flex justify-center items-center p-8">
+		<p class="text-red-600">Error: {error}</p>
+	</div>
+{:else if shipment}
+	<Card>
+		<div class="w-full flex flex-col gap-2">
+			<div class="flex flex-col md:flex-row items-center justify-between gap-2 w-full">
+				<Heading>{shipment.id}</Heading>
+				<ShipmentProgress {status} />
+			</div>
+			<ItemDetails items={shipment.items} />
+		</div>
+		{#snippet actionButtons()}
+			<Button 
+				disabled={status !== 'booked' || actionLoading} 
+				loading={actionLoading}
+				onClick={() => dispatchShipment(shipment)}
+			>
+				Dispatch
+			</Button>
+			<Button 
+				disabled={status !== 'dispatched' || actionLoading} 
+				loading={actionLoading}
+				onClick={() => deliverShipment(shipment)}
+			>
+				Deliver
+			</Button>
+		{/snippet}
+	</Card>
+{:else}
+	<div class="flex justify-center items-center p-8">
+		<p>Shipment not found</p>
+	</div>
+{/if}
