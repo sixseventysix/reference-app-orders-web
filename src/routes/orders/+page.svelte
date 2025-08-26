@@ -15,12 +15,23 @@
 	onMount(async () => {
 		try {
 			// Call your Go backend API instead of server-side load
-			const response = await fetch('/api/orders'); // This will be handled by your Python server for now, later your Go server
+			const response = await fetch('http://localhost:8085/api/orders', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({})
+			});
 			if (!response.ok) {
 				throw new Error(`Failed to fetch orders: ${response.status}`);
 			}
 			const data = await response.json();
-			orders = data.orders || data; // Handle different response formats
+			const inner = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
+			const rows = Array.isArray(inner?.orders) ? inner.orders : [];
+			orders = rows.map((r: any) => ({
+				id: r.id,
+				status: r.status,
+				receivedAt: r.received_at ?? r.receivedAt ?? null,
+				completedAt: r.completed_at ?? r.completedAt ?? null
+			}));
 		} catch (err) {
 			console.error('Error loading orders:', err);
 			error = err.message;

@@ -4,7 +4,7 @@
 	const inactiveStatuses = ['pending', 'unavailable', 'cancelled', 'failed'];
 	const activeStatuses = ['booked', 'dispatched', 'delivered'];
 
-	const finalStatus = $derived(status || 'pending');
+	const finalStatus = $derived(status || 'booked');
 	const inactive = $derived(inactiveStatuses.includes(finalStatus));
 	const statuses = $derived(inactive ? [finalStatus] : activeStatuses);
 	const currentIndex = $derived(inactive ? 0 : activeStatuses.indexOf(finalStatus));

@@ -26,12 +26,21 @@
 		}
 		
 		try {
-			const response = await fetch(`/api/orders/${id}`);
+			const response = await fetch('http://localhost:8085/api/order', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ order_id: id })
+			});
 			if (!response.ok) {
 				throw new Error(`Failed to fetch order: ${response.status}`);
 			}
-			const data = await response.json();
-			order = data.order || data;
+			const outer = await response.json();                       // { id, result: "<json>" }
+			const inner = typeof outer.result === 'string' ? JSON.parse(outer.result) : outer.result;
+			const arr = Array.isArray(inner?.order) ? inner.order : [];
+			order = arr.find((o: any) => o.id === id) ?? arr[0] ?? null;
+
+			if (!order) throw new Error('Order not found');
+			error = null;
 		} catch (err) {
 			console.error('Error loading order:', err);
 			error = err.message;

@@ -26,12 +26,21 @@
 		}
 		
 		try {
-			const response = await fetch(`/api/shipments/${id}`);
+			const response = await fetch('http://localhost:8085/api/shipment', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ shipment_id: id })
+			});
 			if (!response.ok) {
 				throw new Error(`Failed to fetch shipment: ${response.status}`);
 			}
-			const data = await response.json();
-			shipment = data.shipment || data;
+			const outer = await response.json();                       // { id, result: "<json>" }
+			const inner = typeof outer.result === 'string' ? JSON.parse(outer.result) : outer.result;
+			const arr = Array.isArray(inner?.shipment) ? inner.shipment : [];
+			shipment = arr.find((o: any) => o.id === id) ?? arr[0] ?? null;
+
+			if (!shipment) throw new Error('shipment not found');
+			error = null;
 		} catch (err) {
 			console.error('Error loading shipment:', err);
 			error = err.message;
@@ -73,13 +82,21 @@
 		
 		actionLoading = true;
 		try {
-			const signal = { name: 'ShipmentUpdate', status: 'dispatched' };
-			const response = await fetch('/api/shipment', {
-				method: 'POST',
+			const orderId = shipment.id;
+			const shipmentId = 'shipment:' + orderId;
+			const url = new URL(`/flow/${encodeURIComponent(shipmentId)}`, 'http://localhost:8085');
+			const response = await fetch(url, {
+				method: 'PATCH',
 				headers: {
 					'Content-Type': 'application/json',
 				},
-				body: JSON.stringify({ shipment, signal })
+				body: JSON.stringify({
+					signal_name: 'update_shipment_status_signal',
+					input: {
+						id: orderId,
+						status: 'dispatched'
+					}
+				})
 			});
 
 			if (!response.ok) {
@@ -106,13 +123,21 @@
 		
 		actionLoading = true;
 		try {
-			const signal = { name: 'ShipmentUpdate', status: 'delivered' };
-			const response = await fetch('/api/shipment', {
-				method: 'POST',
+			const orderId = shipment.id;
+			const shipmentId = 'shipment:' + orderId;
+			const url = new URL(`/flow/${encodeURIComponent(shipmentId)}`, 'http://localhost:8085');
+			const response = await fetch(url, {
+				method: 'PATCH',
 				headers: {
 					'Content-Type': 'application/json',
 				},
-				body: JSON.stringify({ shipment, signal })
+				body: JSON.stringify({
+					signal_name: 'update_shipment_status_signal',
+					input: {
+						id: orderId,
+						status: 'delivered'
+					}
+				})
 			});
 
 			if (!response.ok) {

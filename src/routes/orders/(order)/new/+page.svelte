@@ -24,12 +24,12 @@
 		
 		try {
 			// Call your Go backend API to create the order
-			const response = await fetch('/api/order', {
+			const response = await fetch('http://localhost:8085/api/order-workflow', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
 				},
-				body: JSON.stringify({ order })
+				body: JSON.stringify({ input: order })
 			});
 
 			if (!response.ok) {
