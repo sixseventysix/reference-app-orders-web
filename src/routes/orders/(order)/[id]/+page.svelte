@@ -26,10 +26,10 @@
 		}
 		
 		try {
-			const response = await fetch('http://localhost:8085/api/order', {
-				method: 'POST',
+			const response = await fetch(`http://localhost:8085/api/orders/${id}`, {
+				method: 'GET',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ order_id: id })
+				credentials: 'include'
 			});
 			if (!response.ok) {
 				throw new Error(`Failed to fetch order: ${response.status}`);

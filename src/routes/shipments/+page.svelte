@@ -14,9 +14,9 @@
 		try {
 			// Call your Go backend API instead of server-side load
 			const response = await fetch('http://localhost:8085/api/shipments', {
-				method: 'POST',
+				method: 'GET',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({})
+				credentials: 'include',
 			});
 			if (!response.ok) {
 				throw new Error(`Failed to fetch shipments: ${response.status}`);

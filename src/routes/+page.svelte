@@ -3,8 +3,8 @@
   import { onMount } from 'svelte';
   
   onMount(() => {
-    goto('/role');
+    goto('/signup');
   });
 </script>
 
-<p>Redirecting to role selection...</p>
+<p>Redirecting to signup...</p>
