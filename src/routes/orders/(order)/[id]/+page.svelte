@@ -81,17 +81,21 @@
 		actionLoading = true;
 		try {
 			// Call your Go backend API for order actions
-			const response = await fetch('/api/order-action', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({ id, action })
+			const url = new URL(`/flow/${encodeURIComponent(id)}`, 'http://localhost:8085');
+			const response = await fetch(url, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({
+					signal_name: 'customer_decision_signal',
+					input: {
+						id,         // or order_id: id (server expects either per your signal)
+						action      // 'cancel' | 'amend'
+					}
+				})
 			});
 
-			if (!response.ok) {
-				throw new Error(`Action failed: ${response.status}`);
-			}
+			if (!response.ok) throw new Error(`Action failed: ${response.status}`);
 
 			// Wait a moment for the action to process
 			setTimeout(async () => {
