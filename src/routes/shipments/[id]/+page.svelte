@@ -34,10 +34,19 @@
 			if (!response.ok) {
 				throw new Error(`Failed to fetch shipment: ${response.status}`);
 			}
-			const outer = await response.json();                       // { id, result: "<json>" }
+			const outer = await response.json();
 			const inner = typeof outer.result === 'string' ? JSON.parse(outer.result) : outer.result;
-			const arr = Array.isArray(inner?.shipment) ? inner.shipment : [];
-			shipment = arr.find((o: any) => o.id === id) ?? arr[0] ?? null;
+			
+			// Handle both single shipment object and array
+			if (inner?.shipment) {
+				if (Array.isArray(inner.shipment)) {
+					shipment = inner.shipment.find((s: any) => s.id === id) ?? inner.shipment[0] ?? null;
+				} else {
+					shipment = inner.shipment.id === id ? inner.shipment : null;
+				}
+			} else {
+				shipment = null;
+			}
 
 			if (!shipment) throw new Error('shipment not found');
 			error = null;

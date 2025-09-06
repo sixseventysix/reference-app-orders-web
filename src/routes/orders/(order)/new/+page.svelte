@@ -28,6 +28,7 @@
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
+					'X-Flow-ID': order.id,
 				},
 				credentials: 'include',
 				body: JSON.stringify({ input: order })

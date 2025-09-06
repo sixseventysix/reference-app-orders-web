@@ -36,8 +36,17 @@
 			}
 			const outer = await response.json();                       // { id, result: "<json>" }
 			const inner = typeof outer.result === 'string' ? JSON.parse(outer.result) : outer.result;
-			const arr = Array.isArray(inner?.order) ? inner.order : [];
-			order = arr.find((o: any) => o.id === id) ?? arr[0] ?? null;
+			if (inner?.order) {
+				if (Array.isArray(inner.order)) {
+					// Array case: find matching order
+					order = inner.order.find((o: any) => o.id === id) ?? inner.order[0] ?? null;
+				} else {
+					// Single object case: use directly if ID matches
+					order = inner.order.id === id ? inner.order : null;
+				}
+			} else {
+				order = null;
+			}
 
 			if (!order) throw new Error('Order not found');
 			error = null;
@@ -67,7 +76,7 @@
 			} else if (pollInterval) {
 				clearInterval(pollInterval);
 			}
-		}, 2000); // Poll every 2 seconds instead of 500ms
+		}, 30000); // Poll every 2 seconds instead of 500ms
 
 		// Cleanup on component destroy
 		return () => {
@@ -114,7 +123,7 @@
 		}
 	};
 
-	const actionRequired = $derived(order?.status === 'customerActionRequired');
+	const actionRequired = $derived(order?.status === 'awaiting_customer_decision');
 </script>
 
 {#if loading}
@@ -141,7 +150,7 @@
 					<Button loading={actionLoading} onClick={() => sendAction('cancel')}>Cancel</Button>
 				</div>
 			{:else}
-				<p class="px-4 py-2 text-sm font-light"><i>Customer {order.customerId}</i></p>
+				<p class="px-4 py-2 text-sm font-light"><i>Customer {order.customer_id}</i></p>
 			{/if}
 		{/snippet}
 	</Card>
